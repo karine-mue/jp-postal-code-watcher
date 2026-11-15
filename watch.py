@@ -68,7 +68,7 @@ def load_snapshot(path) -> list[dict]:
         return records
     return load_records(path)
 
-SNAPSHOT_PART_LINES = 40000
+SNAPSHOT_PART_LINES = 20000
 
 def write_snapshot(source_csv_path, snapshot_path) -> None:
     target = Path(snapshot_path)
