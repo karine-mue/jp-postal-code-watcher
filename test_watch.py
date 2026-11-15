@@ -102,6 +102,24 @@ class TestReconcile(unittest.TestCase):
         self.assertEqual(report["added_diff_only"], 1)
 
 
+class TestLoadRecords(unittest.TestCase):
+    def test_load_plain_and_gzip(self):
+        import gzip
+        import os
+        import tempfile
+        text = row() + "\n"
+        with tempfile.TemporaryDirectory() as d:
+            plain = os.path.join(d, "snap.csv")
+            with open(plain, "w", encoding="utf-8") as f:
+                f.write(text)
+            zipped = os.path.join(d, "snap.csv.gz")
+            with gzip.open(zipped, "wt", encoding="utf-8") as f:
+                f.write(text)
+            from watch import load_records
+            self.assertEqual(load_records(plain), load_records(zipped))
+            self.assertEqual(len(load_records(zipped)), 1)
+
+
 class TestAppliers(unittest.TestCase):
     def test_none_applier_registered(self):
         self.assertIn("none", APPLIERS)
