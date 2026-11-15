@@ -4,10 +4,13 @@ import unittest
 from watch import (
     APPLIERS,
     REASON_LABELS,
+    check_new_data_sane,
     diff_snapshots,
+    main,
     parse_csv_text,
     record_key,
     reconcile,
+    update_meta,
 )
 
 
@@ -143,6 +146,95 @@ class TestAppliers(unittest.TestCase):
     def test_none_applier_registered(self):
         self.assertIn("none", APPLIERS)
         APPLIERS["none"]().apply([])  # must not raise
+
+
+class TestReviewFixes(unittest.TestCase):
+    """Fixes from the 2026-11-15 Claude review."""
+
+    def test_empty_new_data_refused(self):
+        old = parse_csv_text(row() + "\n")
+        with self.assertRaises(ValueError):
+            check_new_data_sane(old, [])
+
+    def test_shrunken_new_data_refused(self):
+        old = parse_csv_text(row() + "\n" + row(postal="1000002") + "\n"
+                             + row(postal="1000003") + "\n" + row(postal="1000004") + "\n")
+        new = parse_csv_text(row() + "\n")
+        with self.assertRaises(ValueError):
+            check_new_data_sane(old, new)
+
+    def test_normal_change_passes_guard(self):
+        old = parse_csv_text(row() + "\n" + row(postal="1000002") + "\n")
+        new = parse_csv_text(row() + "\n" + row(postal="1000003") + "\n")
+        check_new_data_sane(old, new)  # must not raise
+
+    def test_duplicate_keys_detected(self):
+        dup = parse_csv_text(row() + "\n" + row(upd="1", reason="5") + "\n")
+        # Same key (cols 1-13) twice: parse keeps both, diff must refuse
+        self.assertEqual(len(dup), 2)
+        with self.assertRaises(ValueError):
+            diff_snapshots(dup, dup, "2026-11-01")
+
+    def test_event_order_deterministic(self):
+        # Two towns sharing postal code / jis / town_kana, differing in
+        # town_name: order must not depend on input order.
+        a = row(tn="千代田一", tk="チヨダ")
+        b = row(tn="千代田二", tk="チヨダ")
+        old = parse_csv_text(row(postal="1000009", tn="旧町", tk="キュウ") + "\n")
+        ev1 = diff_snapshots(old, parse_csv_text(a + "\n" + b + "\n"), "2026-11-01")
+        ev2 = diff_snapshots(old, parse_csv_text(b + "\n" + a + "\n"), "2026-11-01")
+        self.assertEqual([e["town_name"] for e in ev1], [e["town_name"] for e in ev2])
+
+    def test_main_empty_new_exits_without_wiping_snapshot(self):
+        import os
+        import tempfile
+        with tempfile.TemporaryDirectory() as d:
+            snap = os.path.join(d, "snap.csv")
+            with open(snap, "w", encoding="utf-8") as f:
+                f.write(row() + "\n")
+            empty = os.path.join(d, "empty.csv")
+            with open(empty, "w", encoding="utf-8") as f:
+                f.write("")
+            with self.assertRaises(SystemExit):
+                main(["check", "--snapshot", snap, "--new", empty,
+                      "--date", "2026-11-01", "--update-snapshot"])
+            with open(snap, encoding="utf-8") as f:
+                self.assertIn("1000001", f.read())  # snapshot untouched
+
+    def test_main_one_sided_official_args_rejected(self):
+        import os
+        import tempfile
+        with tempfile.TemporaryDirectory() as d:
+            snap = os.path.join(d, "snap.csv")
+            new = os.path.join(d, "new.csv")
+            for p in (snap, new):
+                with open(p, "w", encoding="utf-8") as f:
+                    f.write(row() + "\n")
+            with self.assertRaises(SystemExit):
+                main(["check", "--snapshot", snap, "--new", new,
+                      "--date", "2026-11-01", "--official-add", new])
+
+    def test_update_meta(self):
+        import hashlib
+        import json
+        import os
+        import tempfile
+        with tempfile.TemporaryDirectory() as d:
+            csv_path = os.path.join(d, "new.csv")
+            with open(csv_path, "w", encoding="utf-8") as f:
+                f.write(row() + "\n")
+            meta_path = os.path.join(d, "meta.json")
+            with open(meta_path, "w", encoding="utf-8") as f:
+                json.dump({"custom": "keep"}, f)
+            update_meta(meta_path, source="https://example.invalid/x.zip",
+                        data_as_of="2026-11-01", rows=1, csv_path=csv_path)
+            with open(meta_path, encoding="utf-8") as f:
+                meta = json.loads(f.read())
+            self.assertEqual(meta["rows"], 1)
+            self.assertEqual(meta["data_as_of"], "2026-11-01")
+            self.assertEqual(meta["custom"], "keep")
+            with open(csv_path, "rb") as f:
+                self.assertEqual(meta["sha256"], hashlib.sha256(f.read()).hexdigest())
 
 
 if __name__ == "__main__":
