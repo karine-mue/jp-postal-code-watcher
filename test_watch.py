@@ -120,6 +120,25 @@ class TestLoadRecords(unittest.TestCase):
             self.assertEqual(len(load_records(zipped)), 1)
 
 
+class TestSnapshotDirectory(unittest.TestCase):
+    def test_load_and_write_parts(self):
+        import os
+        import tempfile
+        from watch import load_snapshot, write_snapshot
+        text = row() + "\n" + row(postal="1000002", tn="丸の内", tk="マルノウチ") + "\n"
+        with tempfile.TemporaryDirectory() as d:
+            src = os.path.join(d, "new.csv")
+            with open(src, "w", encoding="utf-8") as f:
+                f.write(text)
+            snap_dir = os.path.join(d, "snapshot")
+            write_snapshot(src, snap_dir)
+            parts = sorted(os.listdir(snap_dir))
+            self.assertEqual(parts, ["part-001.csv"])
+            recs = load_snapshot(snap_dir)
+            self.assertEqual(len(recs), 2)
+            self.assertEqual(recs[1]["town_name"], "丸の内")
+
+
 class TestAppliers(unittest.TestCase):
     def test_none_applier_registered(self):
         self.assertIn("none", APPLIERS)
