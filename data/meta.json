@@ -4,6 +4,6 @@
   "fetched_on": "2026-11-15",
   "rows": 124527,
   "sha256": "33a3a1e14a69778282cfb22c17ba0b5f888669d091ada93e1ba960f259f6b2d5",
-  "file": "current.csv.gz",
-  "storage": "gzip (sha256 is of the uncompressed CSV)"
+  "file": "snapshot/part-001.csv ... part-004.csv",
+  "storage": "plain CSV split into 40000-line parts (sha256 is of the full uncompressed CSV)"
 }
