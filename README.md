@@ -10,7 +10,7 @@
 
 ```sh
 python3 watch.py check \
-  --snapshot data/current.csv.gz \
+  --snapshot data/snapshot \
   --new https://www.post.japanpost.jp/service/search/zipcode/download/utf/zip/utf_ken_all.zip \
   --date 2026-11-03 \
   --events-json changes/events_2026-11.json \
