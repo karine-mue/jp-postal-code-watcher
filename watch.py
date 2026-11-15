@@ -59,6 +59,35 @@ def load_records(path) -> list[dict]:
     text = Path(path).read_text(encoding="utf-8")
     return parse_csv_text(text)
 
+def load_snapshot(path) -> list[dict]:
+    p = Path(path)
+    if p.is_dir():
+        records = []
+        for part in sorted(p.glob("*.csv")):
+            records.extend(load_records(part))
+        return records
+    return load_records(path)
+
+SNAPSHOT_PART_LINES = 40000
+
+def write_snapshot(source_csv_path, snapshot_path) -> None:
+    target = Path(snapshot_path)
+    if target.is_dir() or (not target.exists() and not str(snapshot_path).endswith((".csv", ".gz"))):
+        target.mkdir(parents=True, exist_ok=True)
+        lines = Path(source_csv_path).read_text(encoding="utf-8").splitlines()
+        chunks = [lines[i:i + SNAPSHOT_PART_LINES] for i in range(0, len(lines), SNAPSHOT_PART_LINES)] or [[]]
+        for idx, chunk in enumerate(chunks, start=1):
+            (target / f"part-{idx:03d}.csv").write_text(
+                "".join(line + "\n" for line in chunk), encoding="utf-8")
+        for stale in sorted(target.glob("part-*.csv")):
+            if int(stale.stem.split("-")[1]) > len(chunks):
+                stale.unlink()
+    elif str(snapshot_path).endswith(".gz"):
+        with open(source_csv_path, "rb") as src, gzip.open(snapshot_path, "wb") as dst:
+            shutil.copyfileobj(src, dst)
+    else:
+        shutil.copyfile(source_csv_path, snapshot_path)
+
 def record_key(record: dict) -> tuple:
     return tuple(record[f] for f in KEY_FIELDS)
 
@@ -194,7 +223,7 @@ def main(argv=None) -> None:
                 new_csv_path = _extract_single_csv(new_arg, tmp_dir)
             else:
                 new_csv_path = new_arg
-            snapshot_records = load_records(args.snapshot)
+            snapshot_records = load_snapshot(args.snapshot)
             new_records = load_records(new_csv_path)
             events = diff_snapshots(snapshot_records, new_records, args.date)
             if args.official_add and args.official_del:
@@ -243,11 +272,7 @@ def main(argv=None) -> None:
                             ]
                         )
             if args.update_snapshot and events:
-                if args.snapshot.endswith(".gz"):
-                    with open(new_csv_path, "rb") as src, gzip.open(args.snapshot, "wb") as dst:
-                        shutil.copyfileobj(src, dst)
-                else:
-                    shutil.copyfile(new_csv_path, args.snapshot)
+                write_snapshot(new_csv_path, args.snapshot)
             added = sum(1 for ev in events if ev["change_type"] == "added")
             removed = sum(1 for ev in events if ev["change_type"] == "removed")
             print(f"added={added} removed={removed}")
