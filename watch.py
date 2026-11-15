@@ -1,5 +1,6 @@
 import argparse
 import csv
+import gzip
 import io
 import json
 import os
@@ -52,6 +53,9 @@ def parse_csv_text(text: str) -> list[dict]:
     return records
 
 def load_records(path) -> list[dict]:
+    if str(path).endswith(".gz"):
+        with gzip.open(path, "rt", encoding="utf-8") as f:
+            return parse_csv_text(f.read())
     text = Path(path).read_text(encoding="utf-8")
     return parse_csv_text(text)
 
@@ -239,7 +243,11 @@ def main(argv=None) -> None:
                             ]
                         )
             if args.update_snapshot and events:
-                shutil.copyfile(new_csv_path, args.snapshot)
+                if args.snapshot.endswith(".gz"):
+                    with open(new_csv_path, "rb") as src, gzip.open(args.snapshot, "wb") as dst:
+                        shutil.copyfileobj(src, dst)
+                else:
+                    shutil.copyfile(new_csv_path, args.snapshot)
             added = sum(1 for ev in events if ev["change_type"] == "added")
             removed = sum(1 for ev in events if ev["change_type"] == "removed")
             print(f"added={added} removed={removed}")
