@@ -32,7 +32,8 @@ jobs:
             --date "$(date +%F)" \
             --events-json "changes/events_${ym}.json" \
             --events-csv "changes/events_${ym}.csv" \
-            --update-snapshot | tee /tmp/check_out.txt
+            --update-snapshot \
+            --meta data/meta.json | tee /tmp/check_out.txt
           if grep -q "HAS_CHANGES=1" /tmp/check_out.txt; then
             echo "changed=true" >> "$GITHUB_OUTPUT"
           else
@@ -44,6 +45,6 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add data/snapshot changes/
+          git add data/snapshot data/meta.json changes/
           git commit -m "Postal code data updated"
           git push
